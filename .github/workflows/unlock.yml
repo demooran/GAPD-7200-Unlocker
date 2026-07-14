@@ -13,37 +13,36 @@ jobs:
       - name: Setup Environment
         run: |
           sudo apt-get update
-          # تثبيت الأدوات الضرورية مباشرة (mtd-utils يحتوي على أدوات فك UBI)
-          sudo apt-get install -y mtd-utils squashfs-tools binwalk
+          sudo apt-get install -y squashfs-tools
 
       - name: Extract Firmware
         run: |
           tar -xvf one-newlg7200.tar.gz
-          # بما أن binwalk فشل في فك UBI، سنستخدم أمر فك مباشر
-          # نستخدم ubidump ثم نحولها لـ squashfs
+          # نبحث عن ملف squashfs داخل الـ ubi.bin مباشرة
+          # سنستخدم أمر dd لمحاولة إيجاد بداية نظام الملفات (عادة تبدأ بـ hsqs)
+          # ثم نفكها مباشرة باستخدام unsquashfs
+          
+          # ملاحظة: هذا الأمر قد يحتاج تجربة، سنحاول البحث عن السلسلة السحرية للملف
+          OFFSET=$(grep -aob "hsqs" one-newlg7200/ubi.bin | head -1 | cut -d: -f1)
+          dd if=one-newlg7200/ubi.bin bs=1 skip=$OFFSET of=filesystem.squashfs
+          
           mkdir -p extracted_rootfs
-          # هذا أمر بديل لفك ملفات UBI
-          sudo binwalk -e one-newlg7200/ubi.bin
-          
-          # التحقق من مكان وجود الملفات المفككة
-          ls -R
-          
-          # البحث عن أي مجلد يحتوي على ملفات النظام (مثل bin, etc, usr)
-          # ونقوم بنقله للمجلد المستهدف
-          find . -name "etc" -type d -exec dirname {} \; | head -n 1 > path.txt
-          mv $(cat path.txt)/* extracted_rootfs/
+          unsquashfs -d extracted_rootfs filesystem.squashfs
 
       - name: Unlock and Customize
         run: |
           # 1. فتح الـ SSH
-          sudo sed -i 's/^root:[^:]*:/root::/' extracted_rootfs/etc/shadow
+          # تغيير ملف shadow (تعطيل كلمة المرور)
+          if [ -f extracted_rootfs/etc/shadow ]; then
+            sudo sed -i 's/^root:[^:]*:/root::/' extracted_rootfs/etc/shadow
+          fi
           
-          # 2. ضمان وجود ملف config
+          # 2. ضمان تفعيل dropbear
           mkdir -p extracted_rootfs/etc/config
           echo "config dropbear 'lan'" > extracted_rootfs/etc/config/dropbear
           echo "    option Interface 'lan'" >> extracted_rootfs/etc/config/dropbear
           echo "    option PasswordAuth 'on'" >> extracted_rootfs/etc/config/dropbear
-          
+
       - name: Repack Firmware
         run: |
           # إعادة التغليف
