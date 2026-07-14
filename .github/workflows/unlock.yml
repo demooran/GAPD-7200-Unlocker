@@ -13,35 +13,35 @@ jobs:
       - name: Setup Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y binwalk squashfs-tools git python3-setuptools
-          # تثبيت ubireader مباشرة من المصدر لضمان التوافق
-          git clone https://github.com/jrspruitt/ubi_reader
-          cd ubi_reader
-          sudo python3 setup.py install
+          sudo apt-get install -y binwalk squashfs-tools python3-pip
+          # تثبيت ubireader مباشرة عبر pip (هذه الطريقة أضمن)
+          sudo pip3 install ubireader
 
       - name: Extract Firmware
         run: |
           tar -xvf one-newlg7200.tar.gz
-          # التحقق من وجود الملف قبل البدء
-          ls -l one-newlg7200/ubi.bin
+          # عرض محتويات المجلد للتأكد من المسار
+          ls -R one-newlg7200/
+          # محاولة الفك (بافتراض أن الملف هو ubi.bin)
           ubireader_extract_files one-newlg7200/ubi.bin -o extracted_rootfs
 
       - name: Unlock and Customize
         run: |
-          # الدخول للمجلد المستخرج (عادة ما يكون داخل مجلد فرعي بعد فك الـ UBI)
+          # الانتقال للمسار الذي تنشئه الأداة تلقائياً
+          # عادة ubireader تضع الملفات في مجلد باسم الصورة
           cd extracted_rootfs/ubi_ubi.bin/squashfs-root
           
-          # 1. تعطيل كلمة المرور
+          # 1. فتح الـ SSH
           sudo sed -i 's/^root:[^:]*:/root::/' etc/shadow
           
-          # 2. ضمان تفعيل SSH
+          # 2. إضافة إعدادات الـ SSH
           echo "config dropbear 'lan'" > etc/config/dropbear
           echo "    option Interface 'lan'" >> etc/config/dropbear
           echo "    option PasswordAuth 'on'" >> etc/config/dropbear
           
       - name: Repack Firmware
         run: |
-          # إعادة التغليف باستخدام squashfs
+          # إعادة التغليف
           mksquashfs extracted_rootfs/ubi_ubi.bin/squashfs-root/ final_unlocked.bin -comp xz
           
       - name: Upload Unlocked Firmware
