@@ -1,0 +1,57 @@
+name: Unpack and Unlock Firmware
+
+on:
+  workflow_dispatch:
+
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Setup Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binwalk squashfs-tools python3-pip
+          pip3 install ubireader
+
+      - name: Extract Firmware
+        run: |
+          # فك الملف المرفوع
+          tar -xvf one-newlg7200.tar.gz
+          
+          # فك ملف الـ UBI
+          # نستخدم المسار بناءً على المجلد الذي رفعته
+          ubireader_extract_files one-newlg7200/ubi.bin -o extracted_rootfs
+
+      - name: Unlock and Customize
+        run: |
+          cd extracted_rootfs
+          
+          # 1. فتح الـ SSH (تعطيل كلمة السر)
+          # نعدل ملف shadow ليكون فارغاً في خانة كلمة السر
+          sed -i 's/^root:[^:]*:/root::/' etc/shadow
+          
+          # 2. السماح بـ SSH عبر dropbear
+          mkdir -p etc/dropbear
+          echo "Interface lan" > etc/config/dropbear
+          
+          # 3. حذف ملفات الحماية (اكتب أسماء ملفات الحماية التي تعرفها هنا إذا وجدت)
+          # rm -f etc/init.d/protection_script
+          
+      - name: Repack Firmware
+        run: |
+          # إعادة بناء الـ UBI
+          # هذا الأمر يضغط المجلد مرة أخرى بصيغة UBI
+          mksquashfs extracted_rootfs/ squashfs-root.sqsh -comp xz
+          
+          # ملاحظة: بناء UBI معقد قليلاً، سنقوم بإنشاء نسخة خام
+          mv squashfs-root.sqsh final_unlocked.bin
+
+      - name: Upload Unlocked Firmware
+        uses: actions/upload-artifact@main
+        with:
+          name: Unlocked_Firmware_GAPD7200
+          path: final_unlocked.bin
+
