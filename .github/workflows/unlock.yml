@@ -13,45 +13,39 @@ jobs:
       - name: Setup Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y binwalk squashfs-tools python3-pip
-          pip3 install ubireader
+          sudo apt-get install -y binwalk squashfs-tools git python3-setuptools
+          # تثبيت ubireader مباشرة من المصدر لضمان التوافق
+          git clone https://github.com/jrspruitt/ubi_reader
+          cd ubi_reader
+          sudo python3 setup.py install
 
       - name: Extract Firmware
         run: |
-          # فك الملف المرفوع
           tar -xvf one-newlg7200.tar.gz
-          
-          # فك ملف الـ UBI
-          # نستخدم المسار بناءً على المجلد الذي رفعته
+          # التحقق من وجود الملف قبل البدء
+          ls -l one-newlg7200/ubi.bin
           ubireader_extract_files one-newlg7200/ubi.bin -o extracted_rootfs
 
       - name: Unlock and Customize
         run: |
-          cd extracted_rootfs
+          # الدخول للمجلد المستخرج (عادة ما يكون داخل مجلد فرعي بعد فك الـ UBI)
+          cd extracted_rootfs/ubi_ubi.bin/squashfs-root
           
-          # 1. فتح الـ SSH (تعطيل كلمة السر)
-          # نعدل ملف shadow ليكون فارغاً في خانة كلمة السر
-          sed -i 's/^root:[^:]*:/root::/' etc/shadow
+          # 1. تعطيل كلمة المرور
+          sudo sed -i 's/^root:[^:]*:/root::/' etc/shadow
           
-          # 2. السماح بـ SSH عبر dropbear
-          mkdir -p etc/dropbear
-          echo "Interface lan" > etc/config/dropbear
-          
-          # 3. حذف ملفات الحماية (اكتب أسماء ملفات الحماية التي تعرفها هنا إذا وجدت)
-          # rm -f etc/init.d/protection_script
+          # 2. ضمان تفعيل SSH
+          echo "config dropbear 'lan'" > etc/config/dropbear
+          echo "    option Interface 'lan'" >> etc/config/dropbear
+          echo "    option PasswordAuth 'on'" >> etc/config/dropbear
           
       - name: Repack Firmware
         run: |
-          # إعادة بناء الـ UBI
-          # هذا الأمر يضغط المجلد مرة أخرى بصيغة UBI
-          mksquashfs extracted_rootfs/ squashfs-root.sqsh -comp xz
+          # إعادة التغليف باستخدام squashfs
+          mksquashfs extracted_rootfs/ubi_ubi.bin/squashfs-root/ final_unlocked.bin -comp xz
           
-          # ملاحظة: بناء UBI معقد قليلاً، سنقوم بإنشاء نسخة خام
-          mv squashfs-root.sqsh final_unlocked.bin
-
       - name: Upload Unlocked Firmware
         uses: actions/upload-artifact@main
         with:
           name: Unlocked_Firmware_GAPD7200
           path: final_unlocked.bin
-
