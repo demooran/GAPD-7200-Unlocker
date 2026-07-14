@@ -13,28 +13,28 @@ jobs:
       - name: Setup Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y binwalk squashfs-tools python3-pip
-          # تثبيت ubireader مباشرة عبر pip (هذه الطريقة أضمن)
-          sudo pip3 install ubireader
-
+          sudo apt-get install -y binwalk squashfs-tools
+          
       - name: Extract Firmware
         run: |
           tar -xvf one-newlg7200.tar.gz
-          # عرض محتويات المجلد للتأكد من المسار
-          ls -R one-newlg7200/
-          # محاولة الفك (بافتراض أن الملف هو ubi.bin)
-          ubireader_extract_files one-newlg7200/ubi.bin -o extracted_rootfs
+          # فك ملف الـ ubi باستخدام binwalk
+          # -e تعني استخراج، -M تعني فك تلقائي
+          binwalk -e one-newlg7200/ubi.bin
+          
+          # البحث عن المجلد المستخرج (عادة ما يكون داخل مجلد يبدأ بـ _ubi.bin.extracted)
+          # سنقوم بنقله لمسار ثابت
+          mv _ubi.bin.extracted/squashfs-root extracted_rootfs
 
       - name: Unlock and Customize
         run: |
-          # الانتقال للمسار الذي تنشئه الأداة تلقائياً
-          # عادة ubireader تضع الملفات في مجلد باسم الصورة
-          cd extracted_rootfs/ubi_ubi.bin/squashfs-root
+          cd extracted_rootfs
           
-          # 1. فتح الـ SSH
+          # 1. فتح الـ SSH (تعطيل كلمة السر لـ root)
           sudo sed -i 's/^root:[^:]*:/root::/' etc/shadow
           
-          # 2. إضافة إعدادات الـ SSH
+          # 2. إنشاء إعدادات SSH
+          mkdir -p etc/config
           echo "config dropbear 'lan'" > etc/config/dropbear
           echo "    option Interface 'lan'" >> etc/config/dropbear
           echo "    option PasswordAuth 'on'" >> etc/config/dropbear
@@ -42,7 +42,7 @@ jobs:
       - name: Repack Firmware
         run: |
           # إعادة التغليف
-          mksquashfs extracted_rootfs/ubi_ubi.bin/squashfs-root/ final_unlocked.bin -comp xz
+          mksquashfs extracted_rootfs/ final_unlocked.bin -comp xz
           
       - name: Upload Unlocked Firmware
         uses: actions/upload-artifact@main
