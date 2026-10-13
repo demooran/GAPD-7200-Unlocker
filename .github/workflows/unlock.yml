@@ -14,22 +14,27 @@ jobs:
         run: |
           tar -xvf one-newlg7200.tar.gz
           mkdir -p extracted_rootfs
-          # البحث عن أي مجلد نظام مستخرج وفكه بسلام
           if [ -d one-newlg7200 ]; then
             cp -r one-newlg7200/* extracted_rootfs/
           fi
 
-      - name: Unlock and Customize
+      - name: Inject Custom Settings and Quick Scripts
         run: |
-          # تفعيل الـ SSH وفتح الصلاحيات
+          # 1. تفعيل الـ SSH وكلمة المرور الفارغة للتحكم الكامل
           if [ -f extracted_rootfs/etc/shadow ]; then
             sudo sed -i 's/^root:[^:]*:/root::/' extracted_rootfs/etc/shadow
           fi
           
+          # 2. تفعيل خدمة الـ Dropbear للـ SSH
           mkdir -p extracted_rootfs/etc/config
           echo "config dropbear lan" > extracted_rootfs/etc/config/dropbear
           echo "    option Interface lan" >> extracted_rootfs/etc/config/dropbear
           echo "    option PasswordAuth on" >> extracted_rootfs/etc/config/dropbear
+          
+          # 3. فك ودمج ملف إعداداتك وبرمجتك السريعة المرفوعة مباشرة
+          if [ -f my_quick_config.tar.gz ]; then
+            tar -xzvf my_quick_config.tar.gz -C extracted_rootfs/
+          fi
 
       - name: Repack Firmware
         run: |
